@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -6,21 +6,11 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /workspace
 
-# Install system dependencies needed for Playwright
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy requirements
 COPY requirements.txt .
 
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright and its browser dependencies (Chromium only)
-RUN playwright install chromium
-RUN playwright install-deps chromium
 
 # Copy app code
 COPY . .
