@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: bottle-scrapper-backend
-    env: docker
+    name: bottle-scrapper-api
+    runtime: docker
+    dockerFilePath: backend/Dockerfile
     dockerContext: backend
-    dockerfilePath: backend/Dockerfile
     plan: free
     envVars:
       - key: DATABASE_URL
-        value: sqlite:///./data/leads.db
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
