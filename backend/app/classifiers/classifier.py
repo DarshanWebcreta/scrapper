@@ -156,24 +156,51 @@ def run_rule_based_classification(text: str, url: str) -> Dict[str, Any]:
 async def classify_company(text: str, url: str) -> Dict[str, Any]:
     """
     Classifies a company based on webpage text.
-    First tries Ollama (local AI). If unavailable/error, falls back to rule-based.
+    First tries Gemini (if key provided), then Ollama (local AI). If both unavailable/error, falls back to rule-based.
     """
     snippet = text[:2500].replace('\n', ' ').strip()
     if not snippet:
         return run_rule_based_classification("", url)
         
-    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     prompt = (
         "You are an AI assistant classifying companies from web content.\n"
         f"URL: {url}\n"
         f"Web content snippet: {snippet}\n\n"
-        "Please classify this company and reply ONLY with a JSON object. Do not include markdown code block syntax (like ```json), just raw JSON. The JSON keys must be:\n"
+        "Please classify this company and reply ONLY with a JSON object. The JSON keys must be:\n"
         "1. \"classification\": string (must be one of: \"manufacturer\", \"supplier\", \"trader\", \"distributor\", \"reseller\", \"hospital\", \"restaurant\", \"tech company\", \"startup\", \"logistics company\", \"unknown\")\n"
         "2. \"industry\": string (e.g. \"Packaging\", \"Cosmetics\", \"Beverages\", \"Pharma\", \"Healthcare\", \"Food & Beverage\", \"Logistics\", \"Technology\", \"Retail\")\n"
         "3. \"country\": string (the country where the company is based, e.g. \"China\", \"United States\", \"Germany\", \"India\", \"Turkey\", \"Singapore\", \"Unknown\")\n"
         "4. \"description\": string (brief 1-sentence summary of what they do)"
     )
     
+    # 1. Try Gemini API if key is provided
+    if settings.GEMINI_API_KEY:
+        try:
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.post(
+                    gemini_url,
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json"
+                        }
+                    }
+                )
+                if response.status_code == 200:
+                    res_data = response.json()
+                    response_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    parsed = json.loads(response_text)
+                    if "country" in parsed:
+                        parsed["country"] = normalize_country(parsed["country"])
+                    parsed["method"] = "gemini-1.5-flash"
+                    logger.info(f"Gemini classification successful for {url}: {parsed.get('classification')}")
+                    return parsed
+        except Exception as e:
+            logger.debug(f"Gemini classification failed: {e}. Trying Ollama...")
+
+    # 2. Try Ollama (Local AI)
+    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
             response = await client.post(

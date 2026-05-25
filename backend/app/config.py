@@ -1,6 +1,6 @@
 import os
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 class Settings(BaseSettings):
     # App Settings
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Ollama Classification Settings
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"  # Fallback to rules if llama3 is not present
+    
+    # Gemini API Settings (Optional cloud fallback)
+    GEMINI_API_KEY: Optional[str] = None
     
     # Pre-defined user agents for rotation
     USER_AGENTS: List[str] = [

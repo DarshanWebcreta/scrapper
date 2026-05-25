@@ -87,7 +87,7 @@ def extract_clean_text(html_content: str) -> str:
         return ""
 
 async def extract_custom_fields_via_ai(text: str, fields: List[str], url: str) -> Dict[str, Any]:
-    """Uses local Ollama model to dynamically extract user requested custom fields from page text."""
+    """Uses Gemini API (if key provided) or local Ollama model to dynamically extract user requested custom fields from page text."""
     if not fields:
         return {}
         
@@ -96,23 +96,47 @@ async def extract_custom_fields_via_ai(text: str, fields: List[str], url: str) -
     if not snippet:
         return {}
         
-    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     fields_desc = ", ".join([f'"{f}"' for f in fields])
     prompt = (
         "You are a structured data extractor.\n"
         f"URL: {url}\n"
         f"Web content snippet: {snippet}\n\n"
         f"Extract values for the following keys: {fields_desc}.\n"
-        "Return ONLY a valid JSON object. Do not include markdown code block formats (like ```json), just raw JSON. If a value is not found, set it to null. Ensure exact key matches."
+        "Return ONLY a valid JSON object. If a value is not found, set it to null. Ensure exact key matches."
     )
     
+    # 1. Try Gemini API if key is provided
+    if settings.GEMINI_API_KEY:
+        try:
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    gemini_url,
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json"
+                        }
+                    }
+                )
+                if response.status_code == 200:
+                    res_data = response.json()
+                    response_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    parsed = json.loads(response_text)
+                    if isinstance(parsed, dict):
+                        return parsed
+        except Exception as e:
+            logger.debug(f"Gemini custom field extraction failed/timed out: {e}. Trying Ollama...")
+
+    # 2. Try Ollama (Local AI)
+    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             response = await client.post(
                 ollama_url,
                 json={
                     "model": settings.OLLAMA_MODEL,
-                    "prompt": prompt,
+                    "prompt": prompt + " Do not include markdown code block formats (like ```json), just raw JSON.",
                     "stream": False,
                     "options": {
                         "temperature": 0.0

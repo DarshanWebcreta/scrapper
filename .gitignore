@@ -1,0 +1,25 @@
+# Environments & Secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Databases
+*.db
+leads.db
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node/Frontend
+node_modules/
+dist/
+.eslintcache
+
+# OS
+.DS_Store
+Thumbs.db

@@ -60,27 +60,52 @@ def run_rule_based_query_planner(user_query: str, countries: Optional[List[str]]
 async def plan_search_queries(user_query: str, countries: Optional[List[str]] = None) -> List[str]:
     """
     Generates dynamic search query variations for the scraping engine.
-    Tries Ollama if configured and active, falls back to rule-based template.
+    Tries Gemini (if key provided), then Ollama if configured and active, falls back to rule-based template.
     """
     cleaned = clean_query_input(user_query)
     country_str = ", ".join(countries) if countries else "Global"
     
-    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     prompt = (
         "You are an expert search strategist. Given the business search query and the target countries below, "
         "generate exactly 5 high-converting search variations that can be used on DuckDuckGo or Google to find direct company websites.\n\n"
         f"Query Topic: \"{cleaned}\"\n"
         f"Target Location: \"{country_str}\"\n\n"
-        "Return ONLY a raw JSON list of strings (e.g. [\"variation 1\", \"variation 2\", ...]). Do not include markdown code block formatting (like ```json), just raw text."
+        "Return ONLY a raw JSON list of strings (e.g. [\"variation 1\", \"variation 2\", ...])."
     )
     
+    # 1. Try Gemini API if key is provided
+    if settings.GEMINI_API_KEY:
+        try:
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.post(
+                    gemini_url,
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json"
+                        }
+                    }
+                )
+                if response.status_code == 200:
+                    res_data = response.json()
+                    response_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    parsed = json.loads(response_text)
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        logger.info(f"Gemini successfully generated search variations: {parsed}")
+                        return parsed
+        except Exception as e:
+            logger.debug(f"Gemini query planner failed: {e}. Trying Ollama...")
+
+    # 2. Try Ollama (Local AI)
+    ollama_url = f"{settings.OLLAMA_HOST}/api/generate"
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
             response = await client.post(
                 ollama_url,
                 json={
                     "model": settings.OLLAMA_MODEL,
-                    "prompt": prompt,
+                    "prompt": prompt + " Do not include markdown code block formatting (like ```json), just raw text.",
                     "stream": False,
                     "options": {
                         "temperature": 0.2
