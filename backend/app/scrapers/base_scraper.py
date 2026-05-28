@@ -87,20 +87,12 @@ class BrowserManager:
             logger.debug(f"HTTPX request failed for {url}: {e}")
             return "", 500
 
-    async def fetch_page_content(self, url: str) -> Tuple[str, int]:
-        """
-        Fetch HTML content from a URL.
-        Uses Playwright if available, otherwise falls back to HTTPX.
-        """
-        if not self.use_playwright:
-            return await self.fetch_page_content_httpx(url)
-            
-        # Ensure browser is started
+    async def fetch_page_content_playwright(self, url: str) -> Tuple[str, int]:
+        """Fetch page content using Playwright Chromium browser."""
         if not self.browser:
             await self.start()
             if not self.browser:
-                # Started failed, fallback
-                return await self.fetch_page_content_httpx(url)
+                return "", 500
 
         context = None
         page = None
@@ -127,9 +119,8 @@ class BrowserManager:
             return content, status
             
         except Exception as e:
-            logger.debug(f"Playwright navigation failed for {url}: {e}. Retrying with HTTPX fallback...")
-            # Fallback immediately to HTTPX if playwright fails (e.g. timeout or web-sockets block)
-            return await self.fetch_page_content_httpx(url)
+            logger.debug(f"Playwright navigation failed for {url}: {e}")
+            return "", 500
         finally:
             if page:
                 try:
@@ -141,6 +132,46 @@ class BrowserManager:
                     await context.close()
                 except Exception:
                     pass
+
+    async def fetch_page_content(self, url: str) -> Tuple[str, int]:
+        """
+        Fetch HTML content from a URL.
+        Tries HTTPX first (lightweight and fast).
+        Falls back to Playwright only if HTTPX fails, gets blocked, or returns empty content.
+        """
+        # Try HTTPX first (timeout capped at 10s for fast checks)
+        timeout = min(10.0, float(settings.CRAWL_TIMEOUT))
+        headers = {
+            "User-Agent": self.get_random_user_agent(),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://www.google.com/",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1"
+        }
+        
+        logger.debug(f"Fetching via HTTPX: {url}")
+        try:
+            async with httpx.AsyncClient(headers=headers, timeout=timeout, follow_redirects=True) as client:
+                response = await client.get(url)
+                status = response.status_code
+                content = response.text
+                
+                # Check if we got block page or empty content
+                is_blocked = status in [403, 429, 503] or not content or len(content.strip()) < 500 or "cloudflare" in content.lower()
+                if not is_blocked and status in [200, 201, 202]:
+                    logger.debug(f"HTTPX success ({status}) for {url}")
+                    return content, status
+                    
+                logger.debug(f"HTTPX returned status {status} or got blocked/empty content. Falling back to Playwright...")
+        except Exception as e:
+            logger.debug(f"HTTPX failed for {url}: {e}. Falling back to Playwright...")
+            
+        if self.use_playwright:
+            logger.debug(f"Fetching via Playwright: {url}")
+            return await self.fetch_page_content_playwright(url)
+            
+        return "", 500
 
 # Singleton browser manager for reuse during scraping run
 browser_manager = BrowserManager()

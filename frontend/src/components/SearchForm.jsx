@@ -14,7 +14,8 @@ const COMMON_FIELDS = [
   { id: 'description', label: 'Description' }
 ];
 
-export default function SearchForm({ onSearchSubmit, isRunning }) {
+export default function SearchForm({ onSearchSubmit, isRunning, isStarting }) {
+  const isDisabled = isRunning || isStarting;
   const [query, setQuery] = useState('packaging suppliers');
   
   // Country tag manager states
@@ -72,7 +73,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isRunning) return;
+    if (isDisabled) return;
 
     // Combine standard fields + custom fields
     const allFields = ['company_name', 'website', ...selectedFields, ...customFields];
@@ -106,7 +107,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             required
-            disabled={isRunning}
+            disabled={isDisabled}
           />
         </div>
 
@@ -117,7 +118,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
             {countries.map(c => (
               <span key={c} className="tag" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 {c}
-                {!isRunning && <X size={12} style={{ cursor: 'pointer' }} onClick={() => removeCountryTag(c)} />}
+                {!isDisabled && <X size={12} style={{ cursor: 'pointer' }} onClick={() => removeCountryTag(c)} />}
               </span>
             ))}
             {countries.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Global (All Countries)</span>}
@@ -130,7 +131,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
             value={countryInput}
             onChange={(e) => setCountryInput(e.target.value)}
             onKeyDown={handleCountryKeyDown}
-            disabled={isRunning}
+            disabled={isDisabled}
           />
         </div>
 
@@ -144,7 +145,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
                   type="checkbox"
                   checked={selectedFields.includes(field.id)}
                   onChange={() => toggleField(field.id)}
-                  disabled={isRunning}
+                  disabled={isDisabled}
                   style={{ accentColor: 'var(--color-primary)' }}
                 />
                 {field.label}
@@ -160,7 +161,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
             {customFields.map(f => (
               <span key={f} className="tag" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', borderColor: 'rgba(139, 92, 246, 0.2)', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 {f}
-                {!isRunning && <X size={12} style={{ cursor: 'pointer' }} onClick={() => removeCustomField(f)} />}
+                {!isDisabled && <X size={12} style={{ cursor: 'pointer' }} onClick={() => removeCustomField(f)} />}
               </span>
             ))}
             {customFields.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>None (Standard data only)</span>}
@@ -175,14 +176,14 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
               placeholder="e.g. CEO, founder_name, funding, employees"
               value={newFieldInput}
               onChange={(e) => setNewFieldInput(e.target.value)}
-              disabled={isRunning}
+              disabled={isDisabled}
             />
             <button
               type="button"
               className="btn btn-secondary"
               style={{ width: 'auto', padding: '0.5rem 0.75rem' }}
               onClick={handleAddCustomField}
-              disabled={isRunning}
+              disabled={isDisabled}
             >
               <Plus size={16} />
             </button>
@@ -201,7 +202,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
                 className="form-control"
                 value={maxPages}
                 onChange={(e) => setMaxPages(e.target.value)}
-                disabled={isRunning}
+                disabled={isDisabled}
               >
                 <option value={1}>1 Page</option>
                 <option value={2}>2 Pages</option>
@@ -218,7 +219,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
                 className="form-control"
                 value={concurrency}
                 onChange={(e) => setConcurrency(e.target.value)}
-                disabled={isRunning}
+                disabled={isDisabled}
               >
                 <option value={2}>2 Crawlers</option>
                 <option value={5}>5 Crawlers</option>
@@ -236,7 +237,7 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
               className="form-control"
               value={exportFormat}
               onChange={(e) => setExportFormat(e.target.value)}
-              disabled={isRunning}
+              disabled={isDisabled}
             >
               <option value="csv">CSV Sheet</option>
               <option value="json">JSON Documents</option>
@@ -249,9 +250,14 @@ export default function SearchForm({ onSearchSubmit, isRunning }) {
           type="submit"
           className="btn btn-primary"
           style={{ marginTop: '0.5rem' }}
-          disabled={isRunning}
+          disabled={isDisabled}
         >
-          {isRunning ? (
+          {isStarting ? (
+            <>
+              <span className="badge badge-running spin" style={{ padding: '0.1rem 0.3rem', marginRight: '0.2rem', backgroundColor: 'transparent' }}></span>
+              Starting Scraper... (May take a minute)
+            </>
+          ) : isRunning ? (
             <>
               <span className="badge badge-running spin" style={{ padding: '0.1rem 0.3rem', marginRight: '0.2rem', backgroundColor: 'transparent' }}></span>
               Scraping In Progress...

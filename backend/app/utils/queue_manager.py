@@ -91,8 +91,9 @@ class QueueManager:
                 db.close()
                 return
 
-            # 2. Select Source Adapters dynamically based on query
-            adapters = select_adapters(job.query)
+            # 2. Select Source Adapters dynamically based on query and target countries
+            countries_list = job.countries if isinstance(job.countries, list) else []
+            adapters = select_adapters(job.query, countries_list)
             adapter_names = [a.name for a in adapters]
             logger.info(f"Selected adapters for job #{job_id}: {adapter_names}")
             
@@ -100,17 +101,22 @@ class QueueManager:
             crud.update_scrape_job(db, job_id, progress=10.0)
             discovered_urls: Set[str] = set()
             
+            # Limit keyword queries to the top 3 variations to prevent wasteful long runs
+            keywords_to_query = keywords[:3]
+            
             # Query sequentially per adapter/keyword to be polite and avoid blocks
             for adapter in adapters:
-                if self._cancel_requested:
+                if self._cancel_requested or len(discovered_urls) >= 20:
                     break
-                for kw in keywords:
-                    if self._cancel_requested:
+                for kw in keywords_to_query:
+                    if self._cancel_requested or len(discovered_urls) >= 20:
                         break
                     try:
                         logger.info(f"Running search: Adapter={adapter.name}, Keyword='{kw}'")
                         # Run discovery
                         for country in (countries_list or [None]):
+                            if self._cancel_requested or len(discovered_urls) >= 20:
+                                break
                             urls = await adapter.search(kw, country, max_pages=job.max_pages or 1)
                             if urls:
                                 discovered_urls.update(urls)
@@ -118,6 +124,12 @@ class QueueManager:
                                 crud.create_search_history(db, job_id, f"{kw} ({country or 'Global'})", adapter.name, len(urls))
                     except Exception as e:
                         logger.warning(f"Adapter {adapter.name} failed for query '{kw}': {e}")
+                    
+                    # Check early stopping condition
+                    if len(discovered_urls) >= 20:
+                        logger.info(f"Early stopping discovery phase: already found {len(discovered_urls)} target URLs.")
+                        break
+                        
                     # polite wait
                     await asyncio.sleep(1.0)
             

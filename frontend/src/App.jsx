@@ -17,6 +17,7 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [isLogsConnected, setIsLogsConnected] = useState(false);
   const [skip, setSkip] = useState(0);
+  const [isStarting, setIsStarting] = useState(false);
   const limit = 25;
 
   const [filters, setFilters] = useState({
@@ -147,6 +148,7 @@ export default function App() {
 
   // 3. Actions Handlers
   const handleSearchSubmit = async (params) => {
+    setIsStarting(true);
     try {
       const res = await fetch(`${API_BASE}/queries`, {
         method: 'POST',
@@ -167,6 +169,8 @@ export default function App() {
     } catch (e) {
       console.error(e);
       alert('Network error initiating search.');
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -266,7 +270,7 @@ export default function App() {
         <div className="grid-2col">
           {/* Controls Side Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <SearchForm onSearchSubmit={handleSearchSubmit} isRunning={isRunning} />
+            <SearchForm onSearchSubmit={handleSearchSubmit} isRunning={isRunning} isStarting={isStarting} />
             <SearchHistory
               queries={queries}
               activeQueryId={activeQueryId}
