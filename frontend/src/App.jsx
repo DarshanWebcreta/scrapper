@@ -190,7 +190,7 @@ export default function App() {
         method: 'POST'
       });
       if (res.ok) {
-        fetchQueries();
+        window.location.reload();
       }
     } catch (e) {
       console.error(e);
@@ -206,13 +206,7 @@ export default function App() {
         method: 'DELETE'
       });
       if (res.ok) {
-        if (activeQueryId === id) {
-          setActiveQueryId(null);
-        }
-        setSkip(0);
-        fetchQueries();
-        fetchStats();
-        fetchLeads();
+        window.location.reload();
       }
     } catch (e) {
       console.error(e);
